@@ -11,8 +11,11 @@ import (
 
 func defaultConfig() Config {
 	return Config{
-		Token:       "",
-		ProjectID:   "",
+		Token:     "",
+		ProjectID: "",
+		// Note that this default was taken from checking the browser example.
+		// Google's CURL example code does not function, but this is probably a
+		// "bad" value.
 		ApiEndpoint: "us-central1-prediction-aiplatform.clients6.google.com",
 		ModelID:     "chat-bison@001",
 	}
@@ -76,7 +79,6 @@ func (m *Minstrel) buildURL() string {
 }
 
 func (m *Minstrel) CompleteCandidatesWithParams(params Parameters, content string) (Response, error) {
-	var bearer = "Bearer " + m.config.Token
 	msg := Message{
 		Author:  "user",
 		Content: content,
@@ -94,11 +96,16 @@ func (m *Minstrel) CompleteCandidatesWithParams(params Parameters, content strin
 	if err != nil {
 		return Response{}, err
 	}
+	// If they provide a token, use it. Otherwise, we assume the client is a CGP client
+	var bearer = "Bearer " + m.config.Token
 	req.Header.Add("Authorization", bearer)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return Response{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return Response{}, fmt.Errorf("status %d: %s", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -117,7 +124,7 @@ func (m *Minstrel) Complete(content string) (string, error) {
 func (m *Minstrel) CompleteWithParams(params Parameters, content string) (string, error) {
 	resp, err := m.CompleteCandidatesWithParams(params, content)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	body := ""
 	if len(resp.Predictions) > 0 && len(resp.Predictions[0].Candidates) > 0 {
